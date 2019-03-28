@@ -86,30 +86,33 @@ Fix-PowerShellOutputRedirectionBug
 # will typically produce a message for PowerShell v2 (just an info
 # message though)
 
-# Set SSL 3.0 (48), then TLS 1.0 (192), then TLS 1.1 (768), finally TLS 1.2 (3072)
 # Use integers because the enumeration values for TLS 1.2 and TLS 1.1 won't
 # exist in .NET 4.0, even though they are addressable if .NET 4.5+ is
 # installed (.NET 4.5 is an in-place upgrade).
 
-# Enumerate through protocols list; print not supported protocols as warnings
-(@{ 'Tls 1.2' = 3072; 'Tls 1.1' = 768; 'Tls 1.0' = 192; 'SSL 3.0' = 48 }).GetEnumerator() | Sort-Object -Property key | ForEach-Object {
+# Enumerate through protocols list and print warning when protocol is not supported
+[int32]$protocolsNumber = 0
+
+(@{ 'Tls 1.2' = 3072; 'Tls 1.1' = 768; 'Tls 1.0' = 192; 'SSL 3.0' = 48 }).GetEnumerator() | ForEach-Object {
   $temp = $_
   try {
     [System.Net.ServicePointManager]::SecurityProtocol = $_.Value
+    $protocolsNumber += [int32]$_.Value
   } catch {
     Write-Output "[Warning] $($temp.Key) protocol not supported."
   }
 }
 
-# Get the highest available encryption
-# Print warning if SecurityProtocol is not TLS 1.2 or TLS 1.1
-# Print the encryption
-$securityProtocol = [System.Net.ServicePointManager]::SecurityProtocol.toString().ToLower()
+# Protocol setter and getter is splitted to two lines to be compatible with PS 2.x
+[System.Net.ServicePointManager]::SecurityProtocol = $protocolsNumber
+$protocols = [System.Net.ServicePointManager]::SecurityProtocol
 
-if ($securityProtocol -ne 'tls11' -AND $securityProtocol -ne 'tls12') {
+# Print available protocols and warn if TLS 1.2 or TLS 1.1 are absent
+Write-Output "Available protocols: ${protocols}"
+
+if (-not ($protocols -like '*Tls12*' -OR $protocols -like '*Tls11*')) {
   Write-Output 'Unable to set PowerShell to use TLS 1.2 and TLS 1.1 due to old .NET Framework installed. If you see underlying connection closed or trust errors, you may need to do one or more of the following: (1) upgrade to .NET Framework 4.5+ and PowerShell v3, (2) specify internal Chocolatey package location (set $env:chocolateyDownloadUrl prior to install or host the package internally), (3) use the Download + PowerShell method of install. See https://chocolatey.org/install for all install options.'
 }
-Write-Output "Security protocol set: $($securityProtocol)"
 
 function Get-Downloader {
 param (
